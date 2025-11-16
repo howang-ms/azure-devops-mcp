@@ -17,6 +17,7 @@ const PIPELINE_TOOLS = {
   pipelines_get_build_log: "pipelines_get_build_log",
   pipelines_get_build_log_by_id: "pipelines_get_build_log_by_id",
   pipelines_get_build_status: "pipelines_get_build_status",
+  pipelines_get_build_timeline: "pipelines_get_build_timeline",
   pipelines_update_build_stage: "pipelines_update_build_stage",
   pipelines_create_pipeline: "pipelines_create_pipeline",
   pipelines_get_run: "pipelines_get_run",
@@ -344,14 +345,29 @@ function configurePipelineTools(server: McpServer, tokenProvider: () => Promise<
     {
       project: z.string().describe("Project ID or name to run the build in"),
       pipelineId: z.number().describe("ID of the pipeline to run"),
+      top: z.number().optional().describe("Maximum number of latest runs to return, sorted by creation date descending"),
     },
-    async ({ project, pipelineId }) => {
+    async ({ project, pipelineId, top }) => {
       const connection = await connectionProvider();
       const pipelinesApi = await connection.getPipelinesApi();
       const pipelineRuns = await pipelinesApi.listRuns(project, pipelineId);
 
+      // Sort by createdDate descending and limit results if top is specified
+      let sortedRuns = pipelineRuns;
+      if (pipelineRuns && pipelineRuns.length > 0) {
+        sortedRuns = [...pipelineRuns].sort((a, b) => {
+          const dateA = a.createdDate ? new Date(a.createdDate).getTime() : 0;
+          const dateB = b.createdDate ? new Date(b.createdDate).getTime() : 0;
+          return dateB - dateA; // Descending order (newest first)
+        });
+        
+        if (top !== undefined && top > 0) {
+          sortedRuns = sortedRuns.slice(0, top);
+        }
+      }
+
       return {
-        content: [{ type: "text", text: JSON.stringify(pipelineRuns, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify(sortedRuns, null, 2) }],
       };
     }
   );
@@ -448,7 +464,7 @@ function configurePipelineTools(server: McpServer, tokenProvider: () => Promise<
 
   server.tool(
     PIPELINE_TOOLS.pipelines_get_build_status,
-    "Fetches the status of a specific build.",
+    "Retrieves the status of a specific build.",
     {
       project: z.string().describe("Project ID or name to get the build status for"),
       buildId: z.number().describe("ID of the build to get the status for"),
@@ -461,6 +477,53 @@ function configurePipelineTools(server: McpServer, tokenProvider: () => Promise<
       return {
         content: [{ type: "text", text: JSON.stringify(build, null, 2) }],
       };
+    }
+  );
+
+  server.tool(
+    PIPELINE_TOOLS.pipelines_get_build_timeline,
+    "Retrieves the timeline for a specific build, including details about jobs, tasks, and their execution status.",
+    {
+      project: z.string().describe("Project ID or name to get the build timeline for"),
+      buildId: z.number().describe("ID of the build to get the timeline for"),
+      timelineId: z.string().optional().describe("Optional timeline ID to retrieve a specific timeline"),
+      changeId: z.number().optional().describe("Optional change ID to retrieve timeline changes since a specific point"),
+      type: z.string().optional().describe("Optional record type to filter timeline records (e.g., 'Stage', 'Job', 'Task', 'Checkpoint')"),
+      name: z.string().optional().describe("Optional name to filter timeline records by name"),
+      state: z.string().optional().describe("Optional state to filter timeline records (e.g., 'completed', 'inProgress', 'pending')"),
+    },
+    async ({ project, buildId, timelineId, changeId, type, name, state }) => {
+      try {
+        const connection = await connectionProvider();
+        const buildApi = await connection.getBuildApi();
+        const timeline = await buildApi.getBuildTimeline(project, buildId, timelineId, changeId);
+
+        // Filter records by type, name, and/or state if specified (case-insensitive)
+        if (timeline && timeline.records) {
+          if (type) {
+            const lowerType = type.toLowerCase();
+            timeline.records = timeline.records.filter((record: any) => record.type?.toLowerCase() === lowerType);
+          }
+          if (name) {
+            const lowerName = name.toLowerCase();
+            timeline.records = timeline.records.filter((record: any) => record.name?.toLowerCase() === lowerName);
+          }
+          if (state) {
+            const lowerState = state.toLowerCase();
+            timeline.records = timeline.records.filter((record: any) => record.state?.toLowerCase() === lowerState);
+          }
+        }
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(timeline, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error retrieving build timeline: ${errorMessage}` }],
+          isError: true,
+        };
+      }
     }
   );
 
