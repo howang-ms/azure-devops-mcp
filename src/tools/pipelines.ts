@@ -480,8 +480,35 @@ function configurePipelineTools(server: McpServer, tokenProvider: () => Promise<
         const buildApi = await connection.getBuildApi();
         const timeline = await buildApi.getBuildTimeline(project, buildId, timelineId, changeId);
 
+        // Helper function to recursively remove null values and empty arrays
+        const cleanObject = (obj: any): any => {
+          if (obj === null || obj === undefined) {
+            return undefined;
+          }
+          
+          if (Array.isArray(obj)) {
+            const cleaned = obj.map(cleanObject).filter(item => item !== undefined);
+            return cleaned.length > 0 ? cleaned : undefined;
+          }
+          
+          if (typeof obj === 'object') {
+            const cleaned: any = {};
+            for (const [key, value] of Object.entries(obj)) {
+              const cleanedValue = cleanObject(value);
+              if (cleanedValue !== undefined) {
+                cleaned[key] = cleanedValue;
+              }
+            }
+            return Object.keys(cleaned).length > 0 ? cleaned : undefined;
+          }
+          
+          return obj;
+        };
+
+        const cleanedTimeline = cleanObject(timeline);
+
         return {
-          content: [{ type: "text", text: JSON.stringify(timeline, null, 2) }],
+          content: [{ type: "text", text: JSON.stringify(cleanedTimeline, null, 2) }],
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";

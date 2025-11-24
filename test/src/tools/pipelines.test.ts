@@ -1027,7 +1027,13 @@ describe("configurePipelineTools", () => {
       const result = await handler(params);
 
       expect(mockBuildApi.getBuildTimeline).toHaveBeenCalledWith("test-project", 456, "timeline-id-2", 3);
-      expect(result.content[0].text).toBe(JSON.stringify(mockTimeline, null, 2));
+      
+      // Empty arrays are removed by the cleaning function
+      const expectedCleanedTimeline = {
+        id: "timeline-id-2",
+        changeId: 5,
+      };
+      expect(result.content[0].text).toBe(JSON.stringify(expectedCleanedTimeline, null, 2));
       expect(result.isError).toBeUndefined();
     });
 
@@ -1051,6 +1057,102 @@ describe("configurePipelineTools", () => {
 
       expect(result.content[0].text).toBe("Error retrieving build timeline: Build not found");
       expect(result.isError).toBe(true);
+    });
+
+    it("should remove null values and empty arrays from timeline response", async () => {
+      configurePipelineTools(server, tokenProvider, connectionProvider, userAgentProvider);
+      const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "pipelines_get_build_timeline");
+      if (!call) throw new Error("pipelines_get_build_timeline tool not registered");
+      const [, , , handler] = call;
+
+      const mockTimelineWithNulls = {
+        id: "timeline-id-3",
+        changeId: 10,
+        url: "https://dev.azure.com/test",
+        records: [
+          {
+            id: "record-1",
+            name: "Build Job",
+            type: "Job",
+            state: "completed",
+            result: "succeeded",
+            startTime: "2025-11-24T10:00:00Z",
+            finishTime: "2025-11-24T10:05:00Z",
+            issues: [],
+            log: null,
+            previousAttempts: [],
+            details: null,
+            errorCount: 0,
+            warningCount: 0,
+          },
+          {
+            id: "record-2",
+            name: "Test Task",
+            type: "Task",
+            state: "completed",
+            result: null,
+            startTime: null,
+            finishTime: null,
+            issues: [],
+            log: {
+              id: 1,
+              type: "Container",
+              url: "https://dev.azure.com/test/log",
+            },
+            details: null,
+            errorCount: 0,
+            warningCount: 0,
+          },
+        ],
+        lastChangedBy: null,
+        lastChangedOn: null,
+      };
+
+      const mockBuildApi = {
+        getBuildTimeline: jest.fn().mockResolvedValue(mockTimelineWithNulls),
+      };
+      mockConnection.getBuildApi.mockResolvedValue(mockBuildApi);
+
+      const params = {
+        project: "test-project",
+        buildId: 789,
+      };
+
+      const result = await handler(params);
+      const parsedResult = JSON.parse(result.content[0].text);
+
+      // Should keep non-null values
+      expect(parsedResult.id).toBe("timeline-id-3");
+      expect(parsedResult.changeId).toBe(10);
+      expect(parsedResult.url).toBe("https://dev.azure.com/test");
+
+      // Should remove null values
+      expect(parsedResult.lastChangedBy).toBeUndefined();
+      expect(parsedResult.lastChangedOn).toBeUndefined();
+
+      // Should remove empty arrays
+      expect(parsedResult.records[0].issues).toBeUndefined();
+      expect(parsedResult.records[0].previousAttempts).toBeUndefined();
+
+      // Should remove null in nested objects
+      expect(parsedResult.records[0].log).toBeUndefined();
+      expect(parsedResult.records[0].details).toBeUndefined();
+
+      // Should keep non-null nested values
+      expect(parsedResult.records[0].name).toBe("Build Job");
+      expect(parsedResult.records[0].errorCount).toBe(0);
+
+      // Should keep non-empty objects even if they have null properties
+      expect(parsedResult.records[1].log).toBeDefined();
+      expect(parsedResult.records[1].log.id).toBe(1);
+
+      // Should remove null values from nested objects
+      expect(parsedResult.records[1].result).toBeUndefined();
+      expect(parsedResult.records[1].startTime).toBeUndefined();
+      expect(parsedResult.records[1].finishTime).toBeUndefined();
+      expect(parsedResult.records[1].details).toBeUndefined();
+
+      expect(result.isError).toBeUndefined();
     });
   });
 });
