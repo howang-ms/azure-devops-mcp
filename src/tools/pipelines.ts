@@ -17,6 +17,7 @@ const PIPELINE_TOOLS = {
   pipelines_get_build_log: "pipelines_get_build_log",
   pipelines_get_build_log_by_id: "pipelines_get_build_log_by_id",
   pipelines_get_build_status: "pipelines_get_build_status",
+  pipelines_get_build_timeline: "pipelines_get_build_timeline",
   pipelines_update_build_stage: "pipelines_update_build_stage",
   pipelines_create_pipeline: "pipelines_create_pipeline",
   pipelines_get_run: "pipelines_get_run",
@@ -448,7 +449,7 @@ function configurePipelineTools(server: McpServer, tokenProvider: () => Promise<
 
   server.tool(
     PIPELINE_TOOLS.pipelines_get_build_status,
-    "Fetches the status of a specific build.",
+    "Retrieves the status of a specific build.",
     {
       project: z.string().describe("Project ID or name to get the build status for"),
       buildId: z.number().describe("ID of the build to get the status for"),
@@ -461,6 +462,34 @@ function configurePipelineTools(server: McpServer, tokenProvider: () => Promise<
       return {
         content: [{ type: "text", text: JSON.stringify(build, null, 2) }],
       };
+    }
+  );
+
+  server.tool(
+    PIPELINE_TOOLS.pipelines_get_build_timeline,
+    "Retrieves the timeline for a specific build, including details about jobs, tasks, and their execution status.",
+    {
+      project: z.string().describe("Project ID or name to get the build timeline for"),
+      buildId: z.number().describe("ID of the build to get the timeline for"),
+      timelineId: z.string().optional().describe("Optional timeline ID to retrieve a specific timeline"),
+      changeId: z.number().optional().describe("Optional change ID to retrieve timeline changes since a specific point"),
+    },
+    async ({ project, buildId, timelineId, changeId }) => {
+      try {
+        const connection = await connectionProvider();
+        const buildApi = await connection.getBuildApi();
+        const timeline = await buildApi.getBuildTimeline(project, buildId, timelineId, changeId);
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(timeline, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error retrieving build timeline: ${errorMessage}` }],
+          isError: true,
+        };
+      }
     }
   );
 
