@@ -473,12 +473,18 @@ function configurePipelineTools(server: McpServer, tokenProvider: () => Promise<
       buildId: z.number().describe("ID of the build to get the timeline for"),
       timelineId: z.string().optional().describe("Optional timeline ID to retrieve a specific timeline"),
       changeId: z.number().optional().describe("Optional change ID to retrieve timeline changes since a specific point"),
+      type: z.string().optional().describe("Optional record type to filter timeline records (e.g., 'Stage', 'Job', 'Task', 'Checkpoint')"),
     },
-    async ({ project, buildId, timelineId, changeId }) => {
+    async ({ project, buildId, timelineId, changeId, type }) => {
       try {
         const connection = await connectionProvider();
         const buildApi = await connection.getBuildApi();
         const timeline = await buildApi.getBuildTimeline(project, buildId, timelineId, changeId);
+
+        // Filter records by type if specified
+        if (type && timeline && timeline.records) {
+          timeline.records = timeline.records.filter((record: any) => record.type === type);
+        }
 
         // Helper function to recursively remove null values and empty arrays
         const cleanObject = (obj: any): any => {
