@@ -474,16 +474,26 @@ function configurePipelineTools(server: McpServer, tokenProvider: () => Promise<
       timelineId: z.string().optional().describe("Optional timeline ID to retrieve a specific timeline"),
       changeId: z.number().optional().describe("Optional change ID to retrieve timeline changes since a specific point"),
       type: z.string().optional().describe("Optional record type to filter timeline records (e.g., 'Stage', 'Job', 'Task', 'Checkpoint')"),
+      name: z.string().optional().describe("Optional name to filter timeline records by name"),
+      state: z.string().optional().describe("Optional state to filter timeline records (e.g., 'completed', 'inProgress', 'pending')"),
     },
-    async ({ project, buildId, timelineId, changeId, type }) => {
+    async ({ project, buildId, timelineId, changeId, type, name, state }) => {
       try {
         const connection = await connectionProvider();
         const buildApi = await connection.getBuildApi();
         const timeline = await buildApi.getBuildTimeline(project, buildId, timelineId, changeId);
 
-        // Filter records by type if specified
-        if (type && timeline && timeline.records) {
-          timeline.records = timeline.records.filter((record: any) => record.type === type);
+        // Filter records by type, name, and/or state if specified
+        if (timeline && timeline.records) {
+          if (type) {
+            timeline.records = timeline.records.filter((record: any) => record.type === type);
+          }
+          if (name) {
+            timeline.records = timeline.records.filter((record: any) => record.name === name);
+          }
+          if (state) {
+            timeline.records = timeline.records.filter((record: any) => record.state === state);
+          }
         }
 
         // Helper function to recursively remove null values and empty arrays

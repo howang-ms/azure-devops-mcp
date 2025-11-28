@@ -1263,5 +1263,186 @@ describe("configurePipelineTools", () => {
       expect(result.content[0].text).toBe(JSON.stringify(expectedCleanedTimeline, null, 2));
       expect(result.isError).toBeUndefined();
     });
+
+    it("should filter timeline records by name", async () => {
+      configurePipelineTools(server, tokenProvider, connectionProvider, userAgentProvider);
+      const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "pipelines_get_build_timeline");
+      if (!call) throw new Error("pipelines_get_build_timeline tool not registered");
+      const [, , , handler] = call;
+
+      const mockTimeline = {
+        id: "timeline-id",
+        changeId: 1,
+        records: [
+          {
+            id: "job-1",
+            name: "Build Job",
+            type: "Job",
+            state: "completed",
+            result: "succeeded",
+          },
+          {
+            id: "job-2",
+            name: "Test Job",
+            type: "Job",
+            state: "completed",
+            result: "succeeded",
+          },
+        ],
+      };
+
+      const expectedFilteredTimeline = {
+        id: "timeline-id",
+        changeId: 1,
+        records: [
+          {
+            id: "job-1",
+            name: "Build Job",
+            type: "Job",
+            state: "completed",
+            result: "succeeded",
+          },
+        ],
+      };
+
+      const mockBuildApi = {
+        getBuildTimeline: jest.fn().mockResolvedValue(mockTimeline),
+      };
+      mockConnection.getBuildApi.mockResolvedValue(mockBuildApi);
+
+      const params = {
+        project: "test-project",
+        buildId: 123,
+        name: "Build Job",
+      };
+
+      const result = await handler(params);
+
+      expect(mockBuildApi.getBuildTimeline).toHaveBeenCalledWith("test-project", 123, undefined, undefined);
+      expect(result.content[0].text).toBe(JSON.stringify(expectedFilteredTimeline, null, 2));
+      expect(result.isError).toBeUndefined();
+    });
+
+    it("should filter timeline records by state", async () => {
+      configurePipelineTools(server, tokenProvider, connectionProvider, userAgentProvider);
+      const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "pipelines_get_build_timeline");
+      if (!call) throw new Error("pipelines_get_build_timeline tool not registered");
+      const [, , , handler] = call;
+
+      const mockTimeline = {
+        id: "timeline-id",
+        changeId: 1,
+        records: [
+          {
+            id: "job-1",
+            name: "Build Job",
+            type: "Job",
+            state: "completed",
+            result: "succeeded",
+          },
+          {
+            id: "job-2",
+            name: "Test Job",
+            type: "Job",
+            state: "inProgress",
+          },
+        ],
+      };
+
+      const expectedFilteredTimeline = {
+        id: "timeline-id",
+        changeId: 1,
+        records: [
+          {
+            id: "job-2",
+            name: "Test Job",
+            type: "Job",
+            state: "inProgress",
+          },
+        ],
+      };
+
+      const mockBuildApi = {
+        getBuildTimeline: jest.fn().mockResolvedValue(mockTimeline),
+      };
+      mockConnection.getBuildApi.mockResolvedValue(mockBuildApi);
+
+      const params = {
+        project: "test-project",
+        buildId: 123,
+        state: "inProgress",
+      };
+
+      const result = await handler(params);
+
+      expect(mockBuildApi.getBuildTimeline).toHaveBeenCalledWith("test-project", 123, undefined, undefined);
+      expect(result.content[0].text).toBe(JSON.stringify(expectedFilteredTimeline, null, 2));
+      expect(result.isError).toBeUndefined();
+    });
+
+    it("should filter timeline records by multiple filters (type, name, and state)", async () => {
+      configurePipelineTools(server, tokenProvider, connectionProvider, userAgentProvider);
+      const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "pipelines_get_build_timeline");
+      if (!call) throw new Error("pipelines_get_build_timeline tool not registered");
+      const [, , , handler] = call;
+
+      const mockTimeline = {
+        id: "timeline-id",
+        changeId: 1,
+        records: [
+          {
+            id: "job-1",
+            name: "Build Job",
+            type: "Job",
+            state: "completed",
+            result: "succeeded",
+          },
+          {
+            id: "job-2",
+            name: "Build Job",
+            type: "Job",
+            state: "inProgress",
+          },
+          {
+            id: "task-1",
+            name: "Build Job",
+            type: "Task",
+            state: "inProgress",
+          },
+        ],
+      };
+
+      const expectedFilteredTimeline = {
+        id: "timeline-id",
+        changeId: 1,
+        records: [
+          {
+            id: "job-2",
+            name: "Build Job",
+            type: "Job",
+            state: "inProgress",
+          },
+        ],
+      };
+
+      const mockBuildApi = {
+        getBuildTimeline: jest.fn().mockResolvedValue(mockTimeline),
+      };
+      mockConnection.getBuildApi.mockResolvedValue(mockBuildApi);
+
+      const params = {
+        project: "test-project",
+        buildId: 123,
+        type: "Job",
+        name: "Build Job",
+        state: "inProgress",
+      };
+
+      const result = await handler(params);
+
+      expect(mockBuildApi.getBuildTimeline).toHaveBeenCalledWith("test-project", 123, undefined, undefined);
+      expect(result.content[0].text).toBe(JSON.stringify(expectedFilteredTimeline, null, 2));
+      expect(result.isError).toBeUndefined();
+    });
   });
 });
