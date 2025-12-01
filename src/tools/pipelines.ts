@@ -345,14 +345,29 @@ function configurePipelineTools(server: McpServer, tokenProvider: () => Promise<
     {
       project: z.string().describe("Project ID or name to run the build in"),
       pipelineId: z.number().describe("ID of the pipeline to run"),
+      top: z.number().optional().describe("Maximum number of latest runs to return, sorted by creation date descending"),
     },
-    async ({ project, pipelineId }) => {
+    async ({ project, pipelineId, top }) => {
       const connection = await connectionProvider();
       const pipelinesApi = await connection.getPipelinesApi();
       const pipelineRuns = await pipelinesApi.listRuns(project, pipelineId);
 
+      // Sort by createdDate descending and limit results if top is specified
+      let sortedRuns = pipelineRuns;
+      if (pipelineRuns && pipelineRuns.length > 0) {
+        sortedRuns = [...pipelineRuns].sort((a, b) => {
+          const dateA = a.createdDate ? new Date(a.createdDate).getTime() : 0;
+          const dateB = b.createdDate ? new Date(b.createdDate).getTime() : 0;
+          return dateB - dateA; // Descending order (newest first)
+        });
+        
+        if (top !== undefined && top > 0) {
+          sortedRuns = sortedRuns.slice(0, top);
+        }
+      }
+
       return {
-        content: [{ type: "text", text: JSON.stringify(pipelineRuns, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify(sortedRuns, null, 2) }],
       };
     }
   );
@@ -499,35 +514,8 @@ function configurePipelineTools(server: McpServer, tokenProvider: () => Promise<
           }
         }
 
-        // Helper function to recursively remove null values and empty arrays
-        const cleanObject = (obj: any): any => {
-          if (obj === null || obj === undefined) {
-            return undefined;
-          }
-          
-          if (Array.isArray(obj)) {
-            const cleaned = obj.map(cleanObject).filter(item => item !== undefined);
-            return cleaned.length > 0 ? cleaned : undefined;
-          }
-          
-          if (typeof obj === 'object') {
-            const cleaned: any = {};
-            for (const [key, value] of Object.entries(obj)) {
-              const cleanedValue = cleanObject(value);
-              if (cleanedValue !== undefined) {
-                cleaned[key] = cleanedValue;
-              }
-            }
-            return Object.keys(cleaned).length > 0 ? cleaned : undefined;
-          }
-          
-          return obj;
-        };
-
-        const cleanedTimeline = cleanObject(timeline);
-
         return {
-          content: [{ type: "text", text: JSON.stringify(cleanedTimeline, null, 2) }],
+          content: [{ type: "text", text: JSON.stringify(timeline, null, 2) }],
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
