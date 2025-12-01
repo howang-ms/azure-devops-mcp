@@ -483,16 +483,19 @@ function configurePipelineTools(server: McpServer, tokenProvider: () => Promise<
         const buildApi = await connection.getBuildApi();
         const timeline = await buildApi.getBuildTimeline(project, buildId, timelineId, changeId);
 
-        // Filter records by type, name, and/or state if specified
+        // Filter records by type, name, and/or state if specified (case-insensitive)
         if (timeline && timeline.records) {
           if (type) {
-            timeline.records = timeline.records.filter((record: any) => record.type === type);
+            const lowerType = type.toLowerCase();
+            timeline.records = timeline.records.filter((record: any) => record.type?.toLowerCase() === lowerType);
           }
           if (name) {
-            timeline.records = timeline.records.filter((record: any) => record.name === name);
+            const lowerName = name.toLowerCase();
+            timeline.records = timeline.records.filter((record: any) => record.name?.toLowerCase() === lowerName);
           }
           if (state) {
-            timeline.records = timeline.records.filter((record: any) => record.state === state);
+            const lowerState = state.toLowerCase();
+            timeline.records = timeline.records.filter((record: any) => record.state?.toLowerCase() === lowerState);
           }
         }
 

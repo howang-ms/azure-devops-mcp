@@ -1273,6 +1273,7 @@ describe("configurePipelineTools", () => {
       const mockTimeline = {
         id: "timeline-id",
         changeId: 1,
+        lastChangedOn: "2025-11-24T00:00:00Z",
         records: [
           {
             id: "job-1",
@@ -1288,16 +1289,24 @@ describe("configurePipelineTools", () => {
             state: "completed",
             result: "succeeded",
           },
+          {
+            id: "job-3",
+            name: "Deploy Job",
+            type: "Job",
+            state: "completed",
+            result: "succeeded",
+          },
         ],
       };
 
       const expectedFilteredTimeline = {
         id: "timeline-id",
         changeId: 1,
+        lastChangedOn: "2025-11-24T00:00:00Z",
         records: [
           {
-            id: "job-1",
-            name: "Build Job",
+            id: "job-2",
+            name: "Test Job",
             type: "Job",
             state: "completed",
             result: "succeeded",
@@ -1313,7 +1322,7 @@ describe("configurePipelineTools", () => {
       const params = {
         project: "test-project",
         buildId: 123,
-        name: "Build Job",
+        name: "Test Job",
       };
 
       const result = await handler(params);
@@ -1323,7 +1332,7 @@ describe("configurePipelineTools", () => {
       expect(result.isError).toBeUndefined();
     });
 
-    it("should filter timeline records by state", async () => {
+    it("should filter timeline records by both type and name", async () => {
       configurePipelineTools(server, tokenProvider, connectionProvider, userAgentProvider);
       const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "pipelines_get_build_timeline");
       if (!call) throw new Error("pipelines_get_build_timeline tool not registered");
@@ -1332,7 +1341,15 @@ describe("configurePipelineTools", () => {
       const mockTimeline = {
         id: "timeline-id",
         changeId: 1,
+        lastChangedOn: "2025-11-24T00:00:00Z",
         records: [
+          {
+            id: "stage-1",
+            name: "Build Stage",
+            type: "Stage",
+            state: "completed",
+            result: "succeeded",
+          },
           {
             id: "job-1",
             name: "Build Job",
@@ -1342,9 +1359,10 @@ describe("configurePipelineTools", () => {
           },
           {
             id: "job-2",
-            name: "Test Job",
-            type: "Job",
-            state: "inProgress",
+            name: "Build Task",
+            type: "task",
+            state: "completed",
+            result: "succeeded",
           },
         ],
       };
@@ -1352,12 +1370,14 @@ describe("configurePipelineTools", () => {
       const expectedFilteredTimeline = {
         id: "timeline-id",
         changeId: 1,
+        lastChangedOn: "2025-11-24T00:00:00Z",
         records: [
           {
             id: "job-2",
-            name: "Test Job",
-            type: "Job",
-            state: "inProgress",
+            name: "Build Task",
+            type: "task",
+            state: "completed",
+            result: "succeeded",
           },
         ],
       };
@@ -1370,7 +1390,8 @@ describe("configurePipelineTools", () => {
       const params = {
         project: "test-project",
         buildId: 123,
-        state: "inProgress",
+        type: "Task",
+        name: "Build Task",
       };
 
       const result = await handler(params);
@@ -1380,7 +1401,7 @@ describe("configurePipelineTools", () => {
       expect(result.isError).toBeUndefined();
     });
 
-    it("should filter timeline records by multiple filters (type, name, and state)", async () => {
+    it("should filter timeline records by name case-insensitively", async () => {
       configurePipelineTools(server, tokenProvider, connectionProvider, userAgentProvider);
       const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "pipelines_get_build_timeline");
       if (!call) throw new Error("pipelines_get_build_timeline tool not registered");
@@ -1389,6 +1410,7 @@ describe("configurePipelineTools", () => {
       const mockTimeline = {
         id: "timeline-id",
         changeId: 1,
+        lastChangedOn: "2025-11-24T00:00:00Z",
         records: [
           {
             id: "job-1",
@@ -1399,15 +1421,85 @@ describe("configurePipelineTools", () => {
           },
           {
             id: "job-2",
+            name: "TEST JOB",
+            type: "Job",
+            state: "completed",
+            result: "succeeded",
+          },
+          {
+            id: "job-3",
+            name: "Deploy Job",
+            type: "Job",
+            state: "completed",
+            result: "succeeded",
+          },
+        ],
+      };
+
+      const expectedFilteredTimeline = {
+        id: "timeline-id",
+        changeId: 1,
+        lastChangedOn: "2025-11-24T00:00:00Z",
+        records: [
+          {
+            id: "job-2",
+            name: "TEST JOB",
+            type: "Job",
+            state: "completed",
+            result: "succeeded",
+          },
+        ],
+      };
+
+      const mockBuildApi = {
+        getBuildTimeline: jest.fn().mockResolvedValue(mockTimeline),
+      };
+      mockConnection.getBuildApi.mockResolvedValue(mockBuildApi);
+
+      const params = {
+        project: "test-project",
+        buildId: 123,
+        name: "test job", // lowercase should match "TEST JOB"
+      };
+
+      const result = await handler(params);
+
+      expect(mockBuildApi.getBuildTimeline).toHaveBeenCalledWith("test-project", 123, undefined, undefined);
+      expect(result.content[0].text).toBe(JSON.stringify(expectedFilteredTimeline, null, 2));
+      expect(result.isError).toBeUndefined();
+    });
+
+    it("should filter timeline records by type case-insensitively", async () => {
+      configurePipelineTools(server, tokenProvider, connectionProvider, userAgentProvider);
+      const call = (server.tool as jest.Mock).mock.calls.find(([toolName]) => toolName === "pipelines_get_build_timeline");
+      if (!call) throw new Error("pipelines_get_build_timeline tool not registered");
+      const [, , , handler] = call;
+
+      const mockTimeline = {
+        id: "timeline-id",
+        changeId: 1,
+        lastChangedOn: "2025-11-24T00:00:00Z",
+        records: [
+          {
+            id: "stage-1",
+            name: "Build Stage",
+            type: "Stage",
+            state: "completed",
+            result: "succeeded",
+          },
+          {
+            id: "job-1",
             name: "Build Job",
             type: "Job",
-            state: "inProgress",
+            state: "completed",
+            result: "succeeded",
           },
           {
             id: "task-1",
-            name: "Build Job",
+            name: "Build Task",
             type: "Task",
-            state: "inProgress",
+            state: "completed",
+            result: "succeeded",
           },
         ],
       };
@@ -1415,12 +1507,14 @@ describe("configurePipelineTools", () => {
       const expectedFilteredTimeline = {
         id: "timeline-id",
         changeId: 1,
+        lastChangedOn: "2025-11-24T00:00:00Z",
         records: [
           {
-            id: "job-2",
+            id: "job-1",
             name: "Build Job",
             type: "Job",
-            state: "inProgress",
+            state: "completed",
+            result: "succeeded",
           },
         ],
       };
@@ -1433,9 +1527,7 @@ describe("configurePipelineTools", () => {
       const params = {
         project: "test-project",
         buildId: 123,
-        type: "Job",
-        name: "Build Job",
-        state: "inProgress",
+        type: "job", // lowercase should match "Job"
       };
 
       const result = await handler(params);
