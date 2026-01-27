@@ -4,9 +4,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { apiVersion, getEnumKeys, safeEnumConvert } from "../utils.js";
 import { WebApi } from "azure-devops-node-api";
-import { BuildQueryOrder, DefinitionQueryOrder } from "azure-devops-node-api/interfaces/BuildInterfaces.js";
+import { BuildQueryOrder, DefinitionQueryOrder, StageUpdateType, TaskResult } from "azure-devops-node-api/interfaces/BuildInterfaces.js";
 import { z } from "zod";
-import { StageUpdateType } from "azure-devops-node-api/interfaces/BuildInterfaces.js";
 import { ConfigurationType, RepositoryType } from "azure-devops-node-api/interfaces/PipelinesInterfaces.js";
 
 const PIPELINE_TOOLS = {
@@ -512,6 +511,12 @@ function configurePipelineTools(server: McpServer, tokenProvider: () => Promise<
             const lowerState = state.toLowerCase();
             timeline.records = timeline.records.filter((record: any) => record.state?.toLowerCase() === lowerState);
           }
+
+          // Convert result integer to enum string
+          timeline.records = timeline.records.map((record: any) => ({
+            ...record,
+            result: record.result !== undefined ? TaskResult[record.result] ?? record.result : undefined,
+          }));
         }
 
         return {
